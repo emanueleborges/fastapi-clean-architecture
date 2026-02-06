@@ -1,0 +1,152 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2026-02-06T00:00:00.000Z",
+  "__export_source": "insomnia.desktop.app:v2023.5.8",
+  "resources": [
+    {
+      "_id": "wrk_fastapi",
+      "_type": "workspace",
+      "name": "FastAPI Users API",
+      "description": "CRUD de usuarios"
+    },
+    {
+      "_id": "env_fastapi",
+      "_type": "environment",
+      "parentId": "wrk_fastapi",
+      "name": "Base Environment",
+      "data": {
+        "base_url": "http://127.0.0.1:8000",
+        "user_id": "1"
+      }
+    },
+    {
+      "_id": "fld_users",
+      "_type": "request_group",
+      "parentId": "wrk_fastapi",
+      "name": "Users"
+    },
+    {
+      "_id": "req_create_user",
+      "_type": "request",
+      "parentId": "fld_users",
+      "name": "Create User",
+      "method": "POST",
+      "url": "{{ base_url }}/api/v1/users/",
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\"email\":\"user@example.com\",\"password\":\"string\",\"is_active\":true}"
+      }
+    },
+    {
+      "_id": "req_list_users",
+      "_type": "request",
+      "parentId": "fld_users",
+      "name": "List Users",
+      "method": "GET",
+      "url": "{{ base_url }}/api/v1/users/"
+    },
+    {
+      "_id": "req_get_user",
+      "_type": "request",
+      "parentId": "fld_users",
+      "name": "Get User by ID",
+      "method": "GET",
+      "url": "{{ base_url }}/api/v1/users/{{ user_id }}"
+    },
+    {
+      "_id": "req_update_user",
+      "_type": "request",
+      "parentId": "fld_users",
+      "name": "Update User",
+      "method": "PUT",
+      "url": "{{ base_url }}/api/v1/users/{{ user_id }}",
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\"email\":\"new@example.com\",\"is_active\":false}"
+      }
+    },
+    {
+      "_id": "req_delete_user",
+      "_type": "request",
+      "parentId": "fld_users",
+      "name": "Delete User",
+      "method": "DELETE",
+      "url": "{{ base_url }}/api/v1/users/{{ user_id }}"
+    },
+    {
+      "_id": "req_create_user_dup",
+      "_type": "request",
+      "parentId": "fld_users",
+      "name": "Create User (Duplicate Email) - 400",
+      "method": "POST",
+      "url": "{{ base_url }}/api/v1/users/",
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\"email\":\"user@example.com\",\"password\":\"string\",\"is_active\":true}"
+      }
+    },
+    {
+      "_id": "req_get_user_404",
+      "_type": "request",
+      "parentId": "fld_users",
+      "name": "Get User Not Found - 404",
+      "method": "GET",
+      "url": "{{ base_url }}/api/v1/users/999999"
+    },
+    {
+      "_id": "req_create_user_422",
+      "_type": "request",
+      "parentId": "fld_users",
+      "name": "Create User (Invalid Email) - 422",
+      "method": "POST",
+      "url": "{{ base_url }}/api/v1/users/",
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\"email\":\"email-invalido\",\"password\":\"string\",\"is_active\":true}"
+      }
+    },
+    {
+      "_id": "req_update_user_422",
+      "_type": "request",
+      "parentId": "fld_users",
+      "name": "Update User (Invalid Email) - 422",
+      "method": "PUT",
+      "url": "{{ base_url }}/api/v1/users/{{ user_id }}",
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\"email\":\"email-invalido\",\"is_active\":true}"
+      }
+    }
+  ]
+}
