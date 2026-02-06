@@ -1,37 +1,57 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from typing import Optional
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.user import UserCreate, UserResponse, UserUpdate
-from app.service.user_service import (
-    create_user,
-    get_user,
-    get_users,
-    update_user,
-    delete_user,
-)
-from app.db.session import get_db
+from app.service.user_service import UserService
+from app.repositories.user_repository import UserRepository
+from app.models.user import User
+from app.db.session_async import get_db
 
 router = APIRouter()
 
+# Dependency para instanciar o Service com o Repository correto
+async def get_user_service(db: AsyncSession = Depends(get_db)) -> UserService:
+    repository = UserRepository(User, db)
+    return UserService(repository)
+
 @router.post("/", response_model=UserResponse)
-def register_user(user_in: UserCreate, db: Session = Depends(get_db)):
-    return create_user(db, user_in)
+async def register_user(
+    user_in: UserCreate, 
+    service: UserService = Depends(get_user_service)
+):
+    return await service.create_user(user_in)
 
 
 @router.get("/", response_model=list[UserResponse])
-def list_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    return get_users(db, skip=skip, limit=limit)
+async def list_users(
+    skip: int = 0, 
+    limit: int = 100, 
+    is_active: Optional[bool] = Query(None, description="Filtrar por status de ativação"),
+    service: UserService = Depends(get_user_service)
+):
+    return await service.get_users(skip=skip, limit=limit, is_active=is_active)
 
 
 @router.get("/{user_id}", response_model=UserResponse)
-def retrieve_user(user_id: int, db: Session = Depends(get_db)):
-    return get_user(db, user_id)
+async def retrieve_user(
+    user_id: int, 
+    service: UserService = Depends(get_user_service)
+):
+    return await service.get_user(user_id)
 
 
 @router.put("/{user_id}", response_model=UserResponse)
-def edit_user(user_id: int, user_in: UserUpdate, db: Session = Depends(get_db)):
-    return update_user(db, user_id, user_in)
+async def edit_user(
+    user_id: int, 
+    user_in: UserUpdate, 
+    service: UserService = Depends(get_user_service)
+):
+    return await service.update_user(user_id, user_in)
 
 
 @router.delete("/{user_id}", status_code=204)
-def remove_user(user_id: int, db: Session = Depends(get_db)):
-    delete_user(db, user_id)
+async def remove_user(
+    user_id: int, 
+    service: UserService = Depends(get_user_service)
+):
+    await service.delete_user(user_id)

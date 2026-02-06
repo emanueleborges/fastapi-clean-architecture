@@ -1,68 +1,72 @@
 # FastAPI - Documentacao
 
 ## Visao geral
-API FastAPI com CRUD de usuarios usando SQLAlchemy e SQLite.
+API FastAPI Assíncrona com CRUD de usuarios, implementando Clean Architecture (Service/Repository Pattern) e filtro dinamico.
 
 ## Estrutura do projeto
 ```
 fastapi/
-	app/
-		api/
-			v1/
-				endpoints/
-					users.py
-				api.py
-		core/
-			config.py
-		db/
-			session.py
-		models/
-			user.py
-		schemas/
-			user.py
-		service/
-			user_service.py
-		main.py
-	tests/
-		test_users.py
-	requirements.txt
-	.env
-	sql_app.db
+  app/
+    api/
+      v1/
+        endpoints/
+          users.py
+        api.py
+    core/
+      config.py
+    db/
+      session.py
+      session_async.py
+    models/
+      user.py
+    repositories/
+      base.py
+      user_repository.py
+    schemas/
+      user.py
+    service/
+      user_service.py
+    main.py
+  tests/
+    test_users.py
+  requirements.txt
+  .env
+  sql_app.db
 ```
 
 ### O que cada pasta faz
 - app/api: rotas e organizacao dos endpoints.
 - app/core: configuracoes e variaveis de ambiente.
-- app/db: conexao e sessao do banco.
+- app/db: conexao assincrona com SQLAlchemy + aiosqlite.
 - app/models: modelos do SQLAlchemy.
+- app/repositories: camada de acesso a dados (Repository Pattern).
 - app/schemas: schemas Pydantic para validacao e resposta.
-- app/service: regras de negocio e CRUD.
+- app/service: regras de negocio.
 - app/main.py: ponto de entrada da aplicacao.
-- tests: testes automatizados.
-
+- tests: testes automatizados (AsyncClient).
 ### Por que essa estrutura
-- Separacao clara de responsabilidades (API, modelos, schemas, servicos, DB).
-- Facilita a manutencao e a evolucao do projeto por camadas.
-- Rotas organizadas por versao (v1) para suportar futuras mudancas.
-- Testes fora da pasta app para evitar conflitos de import e manter isolamento.
+- **Async First**: Suporte a alta concorrencia em I/O (Banco de Dados).
+- **Clean Architecture**: Separacao clara em Camadas (Endpoint -> Service -> Repository -> Model).
+- **Repository Pattern**: Desacoplamento do ORM e facilidade para Mock em testes.
+- **Generic Repository**: CRUD padrao reutilizavel para qualquer entidade.
 
 ### Fluxo de requisicao
 1. Requisicao chega no endpoint em app/api.
-2. Schema em app/schemas valida os dados.
-3. Service em app/service executa a regra de negocio.
-4. Model em app/models persiste ou consulta no banco.
-5. Resposta volta formatada pelo schema.
+2. Schema valida os dados.
+3. Service executa regra de negocio.
+4. Repository monta a query assincrona.
+5. Banco executa e retorna para as camadas superiores.
 
 ### Diagrama do fluxo
 ```mermaid
 flowchart LR
-	Client[Cliente] --> API[app/api]
-	API --> Schemas[app/schemas]
-	Schemas --> Service[app/service]
-	Service --> Models[app/models]
-	Models --> DB[(Banco de Dados)]
-	DB --> Models --> Service --> Schemas --> API --> Client
-```
+  Client[Cliente] --> API[app/api]
+  API --> Schemas[app/schemas]
+  Schemas --> Service[app/service]
+  Service --> Repository[app/repositories]
+  Repository --> Models[app/models]
+  Repository --> DB[(Banco Async)]
+  DB --> Repository --> Service --> Schemas --> API --> Client
 
 ## Requisitos
 - Python 3.10+ (recomendado)
@@ -100,7 +104,7 @@ Exemplo (ja existe no repositorio):
 ```
 PROJECT_NAME="FastAPI Professional"
 API_V1_STR="/api/v1"
-DATABASE_URL="sqlite:///./sql_app.db"
+DATABASE_URL="sqlite+aiosqlite:///./sql_app.db"
 ```
 
 ## Ativar venv
@@ -183,10 +187,10 @@ Response (200):
 }
 ```
 
-### Listar usuarios
+### Listar usuarios (com filtro)
 Request:
 ```bash
-curl "http://127.0.0.1:8000/api/v1/users/"
+curl "http://127.0.0.1:8000/api/v1/users/?is_active=true"
 ```
 
 Response (200):

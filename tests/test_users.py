@@ -1,41 +1,53 @@
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+import pytest_asyncio
+from httpx import AsyncClient, ASGITransport
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.main import app
-from app.db.session import Base, get_db
+from app.db.session import Base
+from app.db.session_async import get_db
 
-SQLALCHEMY_DATABASE_URL = "sqlite://"
+# Banco em memória para testes, com suporte a Async
+SQLALCHEMY_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
-test_engine = create_engine(
+test_engine = create_async_engine(
     SQLALCHEMY_DATABASE_URL,
     connect_args={"check_same_thread": False},
     poolclass=StaticPool,
 )
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
+TestingSessionLocal = sessionmaker(
+    class_=AsyncSession, 
+    autocommit=False, 
+    autoflush=False, 
+    bind=test_engine
+)
 
-def override_get_db():
-    db = TestingSessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+async def override_get_db():
+    async with TestingSessionLocal() as session:
+        yield session
 
+app.dependency_overrides[get_db] = override_get_db
 
-@pytest.fixture(scope="function")
-def client():
-    Base.metadata.create_all(bind=test_engine)
-    app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as test_client:
-        yield test_client
-    app.dependency_overrides.clear()
-    Base.metadata.drop_all(bind=test_engine)
+@pytest_asyncio.fixture
+async def client():
+    # Cria tabelas
+    async with test_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    
+    # Cliente Async
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+    
+    # Limpa tabelas (opcional com StaticPool in-memory, mas boa prática)
+    async with test_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
 
-
-def test_user_crud_flow(client: TestClient):
+@pytest.mark.asyncio
+async def test_user_crud_flow(client: AsyncClient):
     payload = {
         "email": "user@example.com",
         "is_active": True,
@@ -43,7 +55,7 @@ def test_user_crud_flow(client: TestClient):
     }
 
     # Create
-    create_resp = client.post("/api/v1/users/", json=payload)
+    create_resp = await client.post("/api/v1/users/", json=payload)
     assert create_resp.status_code == 200
     created = create_resp.json()
     assert created["email"] == payload["email"]
@@ -53,28 +65,35 @@ def test_user_crud_flow(client: TestClient):
     user_id = created["id"]
 
     # List
-    list_resp = client.get("/api/v1/users/")
+    list_resp = await client.get("/api/v1/users/")
     assert list_resp.status_code == 200
     users = list_resp.json()
     assert len(users) == 1
 
+    # Filter List
+    filter_active = await client.get("/api/v1/users/?is_active=true")
+    assert len(filter_active.json()) == 1
+
+    filter_inactive = await client.get("/api/v1/users/?is_active=false")
+    assert len(filter_inactive.json()) == 0
+
     # Retrieve
-    get_resp = client.get(f"/api/v1/users/{user_id}")
+    get_resp = await client.get(f"/api/v1/users/{user_id}")
     assert get_resp.status_code == 200
     assert get_resp.json()["email"] == payload["email"]
 
     # Update
     update_payload = {"email": "new@example.com", "is_active": False}
-    update_resp = client.put(f"/api/v1/users/{user_id}", json=update_payload)
+    update_resp = await client.put(f"/api/v1/users/{user_id}", json=update_payload)
     assert update_resp.status_code == 200
     updated = update_resp.json()
     assert updated["email"] == "new@example.com"
     assert updated["is_active"] is False
 
     # Delete
-    delete_resp = client.delete(f"/api/v1/users/{user_id}")
+    delete_resp = await client.delete(f"/api/v1/users/{user_id}")
     assert delete_resp.status_code == 204
 
     # Confirm delete
-    get_after_delete = client.get(f"/api/v1/users/{user_id}")
+    get_after_delete = await client.get(f"/api/v1/users/{user_id}")
     assert get_after_delete.status_code == 404

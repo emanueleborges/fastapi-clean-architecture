@@ -1,71 +1,67 @@
-from sqlalchemy.orm import Session
+from fastapi import HTTPException, status
 from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdate
-from fastapi import HTTPException, status
+from app.repositories.user_repository import UserRepository
 
-def create_user(db: Session, user_in: UserCreate):
-    # 1. Verificar se o usuário já existe
-    user_exists = db.query(User).filter(User.email == user_in.email).first()
-    if user_exists:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Este e-mail já está cadastrado."
-        )
+class UserService:
+    def __init__(self, repository: UserRepository):
+        self.repository = repository
 
-    # 2. Criar a instância do modelo (Idealmente, aqui você faria o hash da senha)
-    db_user = User(
-        email=user_in.email,
-        hashed_password=user_in.password + "not-secure-hash", # Exemplo didático
-        is_active=True
-    )
-
-    # 3. Persistir no banco
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    
-    return db_user
-
-
-def get_user(db: Session, user_id: int) -> User:
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Usuário não encontrado."
-        )
-    return user
-
-
-def get_users(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(User).offset(skip).limit(limit).all()
-
-
-def update_user(db: Session, user_id: int, user_in: UserUpdate) -> User:
-    user = get_user(db, user_id)
-
-    if user_in.email is not None and user_in.email != user.email:
-        user_exists = db.query(User).filter(User.email == user_in.email).first()
+    async def create_user(self, user_in: UserCreate) -> User:
+        # 1. Verificar se o usuário já existe
+        user_exists = await self.repository.get_by_email(user_in.email)
         if user_exists:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Este e-mail já está cadastrado."
             )
-        user.email = user_in.email
 
-    if user_in.is_active is not None:
-        user.is_active = user_in.is_active
+        # 2. Preparar dados (Hash de senha)
+        user_data = user_in.model_dump()
+        password = user_data.pop("password")
+        user_data["hashed_password"] = password + "not-secure-hash"
+        
+        # 3. Persistir usando o repositório
+        return await self.repository.create(user_data)
 
-    if user_in.password is not None:
-        user.hashed_password = user_in.password + "not-secure-hash"
+    async def get_user(self, user_id: int) -> User:
+        user = await self.repository.get(user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Usuário não encontrado."
+            )
+        return user
 
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return user
+    async def get_users(self, skip: int = 0, limit: int = 100, **filters):
+        return await self.repository.get_all(skip=skip, limit=limit, **filters)
 
+    async def update_user(self, user_id: int, user_in: UserUpdate) -> User:
+        # Garante que usuario existe
+        user = await self.get_user(user_id)
 
-def delete_user(db: Session, user_id: int) -> None:
-    user = get_user(db, user_id)
-    db.delete(user)
-    db.commit()
+        # Valida duplicidade de email se estiver mudando
+        if user_in.email is not None and user_in.email != user.email:
+            user_exists = await self.repository.get_by_email(user_in.email)
+            if user_exists:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Este e-mail já está cadastrado."
+                )
+
+        # Prepara dados de update
+        update_data = user_in.model_dump(exclude_unset=True)
+        if "password" in update_data:
+            password = update_data.pop("password")
+            update_data["hashed_password"] = password + "not-secure-hash"
+
+        # Atualiza via repo
+        return await self.repository.update(user_id, update_data)
+
+    async def delete_user(self, user_id: int) -> None:
+        deleted = await self.repository.delete(user_id)
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Usuário não encontrado."
+            )
