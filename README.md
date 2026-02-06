@@ -67,6 +67,7 @@ flowchart LR
   Repository --> Models[app/models]
   Repository --> DB[(Banco Async)]
   DB --> Repository --> Service --> Schemas --> API --> Client
+```
 
 ## Requisitos
 - Python 3.10+ (recomendado)
